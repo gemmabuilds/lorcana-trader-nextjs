@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "install": "yarn install && yarn playwright install"
+    "lint": "next lint"
   },
   "dependencies": {
     "next": "14.1.0",
