@@ -5,24 +5,22 @@ function getProductUrl(itemId: String) {
 }
 
 function getGridPageUrl(setCodename: String, page: Number) {
-    return `https://www.tcgplayer.com/search/lorcana-tcg/product?view=grid&productLineName=lorcana-tcg&setName=${setCodename}&page=${page}`
+    return `https://www.tcgplayer.com/search/lorcana-tcg/product?view=grid&productLineName=lorcana-tcg&ProductTypeName=Cards&setName=${setCodename}&page=${page}`
 }
 
 class pwManager {
-    url: string;
-    page?: playwright.Page;
     browser?: playwright.Browser;
+    page?: playwright.Page;
 
-    constructor(url: string) {
-        this.url = url;
-    }
+    async getPage(url: string): Promise<playwright.Page> {
+        if (!this.browser)
+            this.browser = await playwright.chromium.launch({
+                headless: true
+            });
+        if (!this.page)
+            this.page = await this.browser.newPage();
 
-    async getPage(): Promise<playwright.Page> {
-        this.browser = await playwright.chromium.launch({
-            headless: true
-        });
-        this.page = await this.browser.newPage();
-        await this.page.goto(this.url);
+        await this.page.goto(url);
         await this.page.waitForLoadState('domcontentloaded');
 
         return this.page;
@@ -34,9 +32,9 @@ class pwManager {
     }
 }
 
-export async function getNumberOfPages(setCodename: String): Promise<Number> {
-    const pwMan = new pwManager(getGridPageUrl(setCodename, 1));
-    const page = await pwMan.getPage();
+export async function getNumberOfPages(setCodename: String): Promise<number> {
+    const pwMan = new pwManager();
+    const page = await pwMan.getPage(getGridPageUrl(setCodename, 1));
 
     const numberOfPages = await page.locator('css=.tcg-pagination__pages')
         .getByRole('link')
@@ -50,9 +48,34 @@ export async function getNumberOfPages(setCodename: String): Promise<Number> {
     return 0;
 }
 
+export async function loadAllCardsInSet(setCodename: String) {
+    const numPages = await getNumberOfPages(setCodename);
+    const pwMan = new pwManager();
+    const cards = [];
+
+    for (let i = 1; i <= numPages; i++) {
+        const page = await pwMan.getPage(getGridPageUrl(setCodename, i));
+
+        const cardsOnPageLocator = await page.locator('css=.search-result');
+        await cardsOnPageLocator.first().waitFor();
+        const cardsOnPage = await cardsOnPageLocator.all();
+        for (const cardTile of cardsOnPage) {
+            const name = await cardTile.locator('css=.search-result__title').textContent();
+            const setNumber = (await cardTile.locator('css=.search-result__rarity').textContent())?.split('#')[1];
+            const productUrl = await cardTile.getByRole('link').getAttribute('href');
+            const tcgPlayerId = productUrl?.split('/')[2];
+
+            cards.push({name, setNumber, tcgPlayerId});
+        }
+    }
+
+    pwMan.close();
+    console.log(cards);
+}
+
 export async function loadTcgItem(itemId: String): Promise<any> {
-    const pwMan = new pwManager(getProductUrl(itemId));
-    const page = await pwMan.getPage();
+    const pwMan = new pwManager();
+    const page = await pwMan.getPage(getProductUrl(itemId));
 
     const marketTr = page.locator('tr', {
         hasText: 'market',
